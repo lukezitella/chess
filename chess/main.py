@@ -54,6 +54,14 @@ class controller(arcade.Window):
         #timer for black
         self.blackTimer=arcade.draw_text("Black: 30:00",820,300,arcade.color.BLACK,20)
 
+        #sound for moving a piece
+        self.sound=arcade.Sound(THUMP_MP3)
+
+        #list of possible en passant moves
+        self.peasant=[]
+        #tracks turns since a passant creating move was done
+        self.peasantMove=0
+
         self.timer.append(self.whiteTimer)
 
         self.timer.append(self.blackTimer)
@@ -63,6 +71,7 @@ class controller(arcade.Window):
             for xx in range(8):
                 list.append(None)
             self.possibleMoves.append(list)
+
 
         self.possibleMoves=self.generatePossibleMoves(self.chessInstance.board)
         self.turnShowWhite=arcade.draw_text("White's Turn",400,900,arcade.color.BLACK,20)
@@ -74,6 +83,7 @@ class controller(arcade.Window):
         self.possibleSpaces=None
         #stores a value that determines if the game is over or not
         self.over=False
+
 
 
 
@@ -91,19 +101,23 @@ class controller(arcade.Window):
         """ Updates the timer and calls the update method in chess instance """
         self.chessInstance.update()
 
-        if self.turn==TEAM_WHITE:
+        if self.turn==TEAM_WHITE and not self.over:
             self.whiteTime+=-delta_time
             time=self.determineTime(self.whiteTime)
             self.whiteTimer=arcade.draw_text("White: "+time,820,630,arcade.color.BLACK,20)
             self.timer[0]=self.whiteTimer
-        else:
+            if self.whiteTime<=0:
+                self.over=True
+                self.turnShow=arcade.draw_text("Black Wins",400,900,arcade.color.BLACK,20)
+        elif self.turn==TEAM_BLACK and not self.over:
             self.blackTime+=-delta_time
             time=self.determineTime(self.blackTime)
             self.blackTimer=arcade.draw_text("Black: "+time,820,300,arcade.color.BLACK,20)
             self.timer[1]=self.blackTimer
+            if self.blackTime<=0:
+                self.over=True
+                self.turnShow=arcade.draw_text("White Wins",400,900,arcade.color.BLACK,20)
 
-    def on_mouse_motion(self, x, y, dx, dy):
-        pass
 
     def on_mouse_press(self, x, y, button, modifiers):
         """ When the mouse is clicked, the method determines if a piece should
@@ -146,6 +160,7 @@ class controller(arcade.Window):
                     for spots in spot:
                         if spots[0]==row and spots[1]==column:
                             bool=True
+
                     if bool:
                         if spaceClicked!=None:
                             if self.turn==TEAM_BLACK:
@@ -153,6 +168,7 @@ class controller(arcade.Window):
                             else:
                                 self.teams[1].remove(spaceClicked)
                         self.chessInstance.movePiece(self.selectedPiece,row,column)
+                        self.sound.play()
 
                         if self.selectedPiece in self.chessInstance.whiteRooks:
                             if self.selectedPieceRow==7 and self.selectedPieceColumn==7:
@@ -183,14 +199,61 @@ class controller(arcade.Window):
                                 else:
                                     self.blackCastle=False
 
+
                         self.chessInstance.board[self.selectedPieceRow][self.selectedPieceColumn]=None
                         self.chessInstance.board[row][column]=self.selectedPiece
+                        if self.peasantMove==1 and self.determineType(self.selectedPiece,self.chessInstance.board)==PAWN_WHITE:
+                            if self.peasant[0]==row+1 and self.peasant[1]==column:
+                                self.teams[1].remove(self.chessInstance.board[row+1][column])
+                                self.chessInstance.board[row+1][column]=None
+
+                        if self.peasantMove==1 and self.determineType(self.selectedPiece,self.chessInstance.board)==PAWN_BLACK:
+                            if self.peasant[0]==row-1 and self.peasant[1]==column:
+                                self.teams[0].remove(self.chessInstance.board[row-1][column])
+                                self.chessInstance.board[row-1][column]=None
+
+                        if self.selectedPiece in self.chessInstance.whitePawns:
+                            if row==4 and self.selectedPieceRow==6:
+
+                                self.peasant=[row,column]
+                                self.peasantMove=2
+
+                            if row==0:
+                                sprite=arcade.Sprite(wqueen,1.3)
+                                sprite.center_y=row*80+200
+                                sprite.center_x=column*80+200
+                                self.chessInstance.board[row][column]=sprite
+                                self.teams[0].remove(self.selectedPiece)
+                                self.chessInstance.whitePawns.remove(self.selectedPiece)
+                                self.chessInstance.whiteQueens.append(sprite)
+                                self.teams[0].append(sprite)
+                        if self.selectedPiece in self.chessInstance.blackPawns:
+                            if row==3 and self.selectedPieceRow==1:
+
+                                self.peasant=[row,column]
+                                self.peasantMove=2
+
+                            if row==7:
+                                sprite=arcade.Sprite(bqueen,1.3)
+                                sprite.center_y=row*80+200
+                                sprite.center_x=column*80+200
+                                self.chessInstance.board[row][column]=sprite
+                                self.teams[1].remove(self.selectedPiece)
+                                self.chessInstance.blackPawns.remove(self.selectedPiece)
+                                self.chessInstance.blackQueens.append(sprite)
+                                self.teams[1].append(sprite)
                         self.selectedPiece=None
                         self.selectedPieceRow=None
                         self.selectedPieceColumn=None
                         self.possibleSpaces=None
                         self.selectedSpace=None
                         self.switchTurn()
+
+                        if self.peasantMove!=0:
+                            self.peasantMove+=-1
+                            if self.peasantMove==0:
+                                self.peasant=[]
+
                         if self.turn==TEAM_WHITE:
                             self.turnShow=self.turnShowWhite
                         else:
@@ -336,6 +399,24 @@ class controller(arcade.Window):
     def wPawnMoves(self,piece,row,column,board,thisTeam,future):
         """ generates moves for white pawns based on the current board"""
         moves=[]
+
+        if self.peasantMove==1:
+            pRow=self.peasant[0]
+            pCol=self.peasant[1]
+            if row==pRow:
+                if column==pCol-1 or column==pRow+1:
+                    if future:
+                        moves.append([pRow-1,pCol])
+                    else:
+                        copy=[]
+                        for lane in board:
+                            copy.append(lane.copy())
+                        copy[pRow-1][pCol]=piece
+                        copy[row][column]=None
+                        copy[pRow][pCol]=None
+                        poss=self.generatePossibleCheckMoves(copy)
+                        if self.isCheck(copy,thisTeam,poss)==False:
+                            moves.append([pRow-1,pCol])
         if column>0:
             spot=board[row-1][column-1]
             if spot!=None:
@@ -380,7 +461,7 @@ class controller(arcade.Window):
                 if self.isCheck(copy,thisTeam,poss)==False:
                     moves.append([row-1,column])
 
-        if board[row-2][column]==None and row==6:
+        if row==6 and board[row-2][column]==None:
             if future:
                 moves.append([row-2,column])
             else:
@@ -399,7 +480,26 @@ class controller(arcade.Window):
     def bPawnMoves(self,piece,row,column,board,thisTeam,future):
         """ generates moves for black pawns based on the current board """
         moves=[]
-        if column>0:
+
+        if self.peasantMove==1:
+            pRow=self.peasant[0]
+            pCol=self.peasant[1]
+            if row==pRow:
+                if column==pCol-1 or column==pRow+1:
+                    if future:
+                        moves.append([pRow+1,pCol])
+                    else:
+                        copy=[]
+                        for lane in board:
+                            copy.append(lane.copy())
+                        copy[pRow+1][pCol]=piece
+                        copy[row][column]=None
+                        copy[pRow][pCol]=None
+                        poss=self.generatePossibleCheckMoves(copy)
+                        if self.isCheck(copy,thisTeam,poss)==False:
+                            moves.append([pRow+1,pCol])
+
+        if row!=7 and column>0:
             spot=board[row+1][column-1]
             if spot!=None and self.determineTeam(spot)!=thisTeam:
                 copy=[]
@@ -413,7 +513,7 @@ class controller(arcade.Window):
                     poss=self.generatePossibleCheckMoves(copy)
                     if self.isCheck(copy,thisTeam,poss)==False:
                         moves.append([row+1,column-1])
-        if column<7:
+        if row!=7 and column<7:
             spot=board[row+1][column+1]
             if spot!=None and self.determineTeam(spot)!=thisTeam:
 
@@ -428,7 +528,7 @@ class controller(arcade.Window):
                     poss=self.generatePossibleCheckMoves(copy)
                     if self.isCheck(copy,thisTeam,poss)==False:
                         moves.append([row+1,column+1])
-        if board[row+1][column]==None:
+        if row!=7 and board[row+1][column]==None:
             if future:
                 moves.append([row+1,column])
             else:
@@ -440,7 +540,7 @@ class controller(arcade.Window):
                 poss=self.generatePossibleCheckMoves(copy)
                 if self.isCheck(copy,thisTeam,poss)==False:
                     moves.append([row+1,column])
-        if board[row+2][column]==None and row==1:
+        if row!=7 and row==1 and board[row+2][column]==None:
             if future:
                 moves.append([row+2,column])
             else:

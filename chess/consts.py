@@ -4,6 +4,7 @@ TEAM_WHITE=0
 TEAM_BLACK=1
 SPACE_GREEN=0
 SPACE_BEIGE=1
+THUMP_MP3="sounds/thump.mp3"
 BEIGE_PNG="images/beige.png"
 GREEN_PNG="images/green.png"
 ORANGE_PNG="images/orange.png"
